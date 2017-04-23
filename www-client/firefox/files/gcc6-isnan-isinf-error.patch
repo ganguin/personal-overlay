@@ -1,0 +1,15 @@
+diff --git a/ff/config/system_wrappers/cmath b/ff/config/system_wrappers/cmath
+index aad8b2c..759e8f5 100644
+--- a/ff/config/system_wrappers/cmath
++++ b/ff/config/system_wrappers/cmath
+@@ -1,4 +1,10 @@
+ #pragma GCC system_header
+ #pragma GCC visibility push(default)
++#ifdef _GLIBCXX_HAVE_OBSOLETE_ISINF
++#undef _GLIBCXX_HAVE_OBSOLETE_ISINF
++#endif
++#ifdef _GLIBCXX_HAVE_OBSOLETE_ISNAN
++#undef _GLIBCXX_HAVE_OBSOLETE_ISNAN
++#endif
+ #include_next <cmath>
+ #pragma GCC visibility pop
