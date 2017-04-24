@@ -1,6 +1,5 @@
 # Copyright 1999-2017 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 EAPI="6"
 PYTHON_COMPAT=( python2_7 )
@@ -17,8 +16,8 @@ SRC_URI="https://commondatastorage.googleapis.com/chromium-browser-official/${P}
 
 LICENSE="BSD"
 SLOT="0"
-KEYWORDS="amd64 ~arm ~arm64 x86"
-IUSE="cups gnome gnome-keyring +gtk3 +hangouts kerberos neon pic +proprietary-codecs pulseaudio selinux +suid +system-ffmpeg +tcmalloc widevine"
+KEYWORDS="amd64 ~arm ~arm64 ~x86"
+IUSE="component-build cups gconf gnome-keyring +gtk3 +hangouts kerberos neon pic +proprietary-codecs pulseaudio selinux +suid +system-ffmpeg +system-libvpx +tcmalloc widevine X"
 RESTRICT="!system-ffmpeg? ( proprietary-codecs? ( bindist ) )"
 
 # Native Client binaries are compiled with different set of flags, bug #452066.
@@ -36,18 +35,21 @@ COMMON_DEPEND="
 	dev-libs/glib:2
 	dev-libs/icu:=
 	>=dev-libs/jsoncpp-0.5.0-r1:=
+	dev-libs/libxml2:=[icu]
+	dev-libs/libxslt:=
 	dev-libs/nspr:=
 	>=dev-libs/nss-3.14.3:=
 	>=dev-libs/re2-0.2016.05.01:=
-	gnome? ( >=gnome-base/gconf-2.24.0:= )
+	gconf? ( >=gnome-base/gconf-2.24.0:= )
 	gnome-keyring? ( >=gnome-base/libgnome-keyring-3.12:= )
 	>=media-libs/alsa-lib-1.0.19:=
 	media-libs/fontconfig:=
 	media-libs/freetype:=
+	>=media-libs/harfbuzz-1.3.1:=[icu(+)]
 	media-libs/libexif:=
 	media-libs/libjpeg-turbo:=
 	media-libs/libpng:=
-	media-libs/libvpx:=[svc]
+	system-libvpx? ( media-libs/libvpx:=[postproc,svc] )
 	media-libs/speex:=
 	pulseaudio? ( media-sound/pulseaudio:= )
 	system-ffmpeg? ( >=media-video/ffmpeg-3:= )
@@ -58,12 +60,23 @@ COMMON_DEPEND="
 	x11-libs/cairo:=
 	x11-libs/gdk-pixbuf:2
 	x11-libs/libdrm
+	X? (
+		x11-libs/libX11:=
+		x11-libs/libXcomposite:=
+		x11-libs/libXcursor:=
+		x11-libs/libXdamage:=
+		x11-libs/libXext:=
+		x11-libs/libXfixes:=
+		>=x11-libs/libXi-1.6.0:=
+		x11-libs/libXinerama:=
+		x11-libs/libXrandr:=
+		x11-libs/libXrender:=
+		x11-libs/libXScrnSaver:=
+		x11-libs/libXtst:=
+	)
 	x11-libs/pango:=
 	app-arch/snappy:=
-	dev-libs/libxml2:=[icu]
-	dev-libs/libxslt:=
 	media-libs/flac:=
-	>=media-libs/harfbuzz-1.3.1:=[icu(+)]
 	>=media-libs/libwebp-0.4.0:=
 	sys-libs/zlib:=[minizip]
 	kerberos? ( virtual/krb5 )
@@ -71,7 +84,7 @@ COMMON_DEPEND="
 # For nvidia-drivers blocker, see bug #413637 .
 RDEPEND="${COMMON_DEPEND}
 	!=www-client/chromium-9999
-	!<www-plugins/chrome-binary-plugins-37
+	!<www-plugins/chrome-binary-plugins-57
 	virtual/opengl
 	virtual/ttf-fonts
 	!gtk3? ( x11-libs/gtk+:2 )
@@ -90,12 +103,14 @@ DEPEND="${COMMON_DEPEND}
 	dev-perl/JSON
 	>=dev-util/gperf-3.0.3
 	dev-util/ninja
+	net-libs/nodejs
 	sys-apps/hwids[usb(+)]
 	>=sys-devel/bison-2.4.3
 	sys-devel/flex
 	virtual/pkgconfig
 	dev-vcs/git
-	x11-libs/gtk+:3
+	!gtk3? ( x11-libs/gtk+:2 )
+	gtk3? ( x11-libs/gtk+:3 )
 	$(python_gen_any_dep '
 		dev-python/beautifulsoup:python-2[${PYTHON_USEDEP}]
 		>=dev-python/beautifulsoup-4.3.2:4[${PYTHON_USEDEP}]
@@ -141,13 +156,6 @@ For other desktop environments, try one of the following:
 - x11-themes/tango-icon-theme
 "
 
-PATCHES=(
-	"${FILESDIR}/${PN}-system-ffmpeg-r4.patch"
-	"${FILESDIR}/${PN}-widevine-r1.patch"
-	"${FILESDIR}/${PN}-glibc-2.24.patch"
-	"${FILESDIR}/${PN}-56-gcc4.patch"
-)
-
 pre_build_checks() {
 	if [[ ${MERGE_TYPE} != binary ]]; then
 		local -x CPP="$(tc-getCXX) -E"
@@ -155,9 +163,9 @@ pre_build_checks() {
 			# bugs: #601654
 			die "At least clang 3.9.1 is required"
 		fi
-		if tc-is-gcc && ! version_is_at_least 4.9 "$(gcc-version)"; then
+		if tc-is-gcc && ! version_is_at_least 4.8 "$(gcc-version)"; then
 			# bugs: #535730, #525374, #518668, #600288
-			die "At least gcc 4.9 is required"
+			die "At least gcc 4.8 is required"
 		fi
 	fi
 
@@ -167,6 +175,9 @@ pre_build_checks() {
 	eshopts_push -s extglob
 	if is-flagq '-g?(gdb)?([1-9])'; then
 		CHECKREQS_DISK_BUILD="25G"
+		if ! use component-build; then
+			CHECKREQS_MEMORY="16G"
+		fi
 	fi
 	eshopts_pop
 	check-reqs_pkg_setup
@@ -186,7 +197,19 @@ pkg_setup() {
 }
 
 src_prepare() {
+	local PATCHES=(
+		"${FILESDIR}/${PN}-widevine-r1.patch"
+		"${FILESDIR}/${PN}-FORTIFY_SOURCE.patch"
+		"${FILESDIR}/${PN}-gn-bootstrap-r2.patch"
+		"${FILESDIR}/skia-avx2.patch"
+	)
+
+	use system-ffmpeg && PATCHES+=( "${FILESDIR}/${PN}-system-ffmpeg-r4.patch" )
+
 	default
+
+	mkdir -p third_party/node/linux/node-linux-x64/bin || die
+	ln -s "${EPREFIX}"/usr/bin/node third_party/node/linux/node-linux-x64/bin/node || die
 
 	local keeplibs=(
 		base/third_party/dmg_fp
@@ -259,6 +282,8 @@ src_prepare() {
 		third_party/mesa
 		third_party/modp_b64
 		third_party/mt19937ar
+		third_party/node
+		third_party/node/node_modules/vulcanize/third_party/UglifyJS2
 		third_party/openh264
 		third_party/openmax_dl
 		third_party/opus
@@ -309,6 +334,10 @@ src_prepare() {
 	if ! use system-ffmpeg; then
 		keeplibs+=( third_party/ffmpeg )
 	fi
+	if ! use system-libvpx; then
+		keeplibs+=( third_party/libvpx )
+		keeplibs+=( third_party/libvpx/source/libvpx/third_party/x86inc )
+	fi
 
 	# Remove most bundled libraries. Some are still needed.
 	build/linux/unbundle/remove_bundled_libraries.py "${keeplibs[@]}" --do-remove || die
@@ -319,6 +348,10 @@ src_configure() {
 
 	# GN needs explicit config for Debug/Release as opposed to inferring it from build directory.
 	myconf_gn+=" is_debug=false"
+
+	# Component build isn't generally intended for use by end users. It's mostly useful
+	# for development and debugging.
+	myconf_gn+=" is_component_build=$(usex component-build true false)"
 
 	# Disable nacl, we can't build without pnacl (http://crbug.com/269560).
 	myconf_gn+=" enable_nacl=false"
@@ -333,36 +366,40 @@ src_configure() {
 	# TODO: use_system_sqlite (http://crbug.com/22208).
 
 	# libevent: https://bugs.gentoo.org/593458
-	local gn_system_libraries="
+	local gn_system_libraries=(
 		flac
 		harfbuzz-ng
 		icu
 		libjpeg
 		libpng
-		libvpx
 		libwebp
 		libxml
 		libxslt
 		re2
 		snappy
 		yasm
-		zlib"
+		zlib
+	)
 	if use system-ffmpeg; then
-		gn_system_libraries+=" ffmpeg"
+		gn_system_libraries+=( ffmpeg )
 	fi
-	build/linux/unbundle/replace_gn_files.py --system-libraries ${gn_system_libraries} || die
+	if use system-libvpx; then
+		gn_system_libraries+=( libvpx )
+	fi
+	build/linux/unbundle/replace_gn_files.py --system-libraries "${gn_system_libraries[@]}" || die
 
 	# Optional dependencies.
 	myconf_gn+=" enable_hangout_services_extension=$(usex hangouts true false)"
 	myconf_gn+=" enable_widevine=$(usex widevine true false)"
 	myconf_gn+=" use_cups=$(usex cups true false)"
-	myconf_gn+=" use_gconf=$(usex gnome true false)"
+	myconf_gn+=" use_gconf=$(usex gconf true false)"
 	myconf_gn+=" use_gnome_keyring=$(usex gnome-keyring true false)"
 	myconf_gn+=" use_gtk3=$(usex gtk3 true false)"
 	myconf_gn+=" use_kerberos=$(usex kerberos true false)"
 	myconf_gn+=" use_pulseaudio=$(usex pulseaudio true false)"
 
-	myconf_gn+=" use_ozone=true ozone_platform_wayland=true ozone_auto_platforms=false enable_package_mash_services=true"
+	myconf_gn+=" use_ozone=true ozone_platform_wayland=true ozone_auto_platforms=false"
+	myconf_gn+=" enable_package_mash_services=true"
 
 	# TODO: link_pulseaudio=true for GN.
 
@@ -478,7 +515,7 @@ src_configure() {
 
 	einfo "Configuring Chromium..."
 	# TODO: bootstrapped gn binary hangs when using tcmalloc with portage's sandbox.
-	tools/gn/bootstrap/bootstrap.py -v --gn-gen-args "${myconf_gn} use_allocator=\"none\"" || die
+	tools/gn/bootstrap/bootstrap.py -v --no-clean --gn-gen-args "${myconf_gn} use_allocator=\"none\"" || die
 	myconf_gn+=" use_allocator=$(usex tcmalloc \"tcmalloc\" \"none\")"
 	out/Release/gn gen --args="${myconf_gn}" out/Release || die
 }
@@ -518,17 +555,16 @@ src_compile() {
 }
 
 src_install() {
-	local CHROMIUM_HOME="/usr/$(get_libdir)/chromium-browser${CHROMIUM_SUFFIX}"
+	local CHROMIUM_HOME="/usr/$(get_libdir)/chromium-browser"
 	exeinto "${CHROMIUM_HOME}"
-	doexe out/Release/chrome || die
+	doexe out/Release/chrome
 
 	if use suid; then
-		newexe out/Release/chrome_sandbox chrome-sandbox || die
+		newexe out/Release/chrome_sandbox chrome-sandbox
 		fperms 4755 "${CHROMIUM_HOME}/chrome-sandbox"
 	fi
 
-	doexe out/Release/chromedriver || die
-	use widevine && doexe out/Release/libwidevinecdmadapter.so
+	doexe out/Release/chromedriver
 
 	# if ! use arm; then
 	#	doexe out/Release/nacl_helper{,_bootstrap} || die
@@ -538,42 +574,43 @@ src_install() {
 	# fi
 
 	local sedargs=( -e "s:/usr/lib/:/usr/$(get_libdir)/:g" )
-	if [[ -n ${CHROMIUM_SUFFIX} ]]; then
-		sedargs+=(
-			-e "s:chromium-browser:chromium-browser${CHROMIUM_SUFFIX}:g"
-			-e "s:chromium.desktop:chromium${CHROMIUM_SUFFIX}.desktop:g"
-			-e "s:plugins:plugins --user-data-dir=\${HOME}/.config/chromium${CHROMIUM_SUFFIX}:"
-		)
-	fi
 	sed "${sedargs[@]}" "${FILESDIR}/chromium-launcher-r3.sh" > chromium-launcher.sh || die
 	doexe chromium-launcher.sh
 
 	# It is important that we name the target "chromium-browser",
 	# xdg-utils expect it; bug #355517.
-	dosym "${CHROMIUM_HOME}/chromium-launcher.sh" /usr/bin/chromium-browser${CHROMIUM_SUFFIX} || die
+	dosym "${CHROMIUM_HOME}/chromium-launcher.sh" /usr/bin/chromium-browser
 	# keep the old symlink around for consistency
-	dosym "${CHROMIUM_HOME}/chromium-launcher.sh" /usr/bin/chromium${CHROMIUM_SUFFIX} || die
+	dosym "${CHROMIUM_HOME}/chromium-launcher.sh" /usr/bin/chromium
 
-	dosym "${CHROMIUM_HOME}/chromedriver" /usr/bin/chromedriver${CHROMIUM_SUFFIX} || die
+	dosym "${CHROMIUM_HOME}/chromedriver" /usr/bin/chromedriver
 
 	# Allow users to override command-line options, bug #357629.
-	dodir /etc/chromium || die
 	insinto /etc/chromium
-	newins "${FILESDIR}/chromium.default" "default" || die
+	newins "${FILESDIR}/chromium.default" "default"
 
 	pushd out/Release/locales > /dev/null || die
 	chromium_remove_language_paks
 	popd
 
+	if use widevine; then
+		# These will be provided by chrome-binary-plugins
+		rm out/Release/libwidevinecdm*.so || die
+	fi
+
 	insinto "${CHROMIUM_HOME}"
-	doins out/Release/*.bin || die
-	doins out/Release/*.pak || die
+	doins out/Release/*.bin
+	doins out/Release/*.pak
+	doins out/Release/*.so
 
-	doins -r out/Release/locales || die
-	doins -r out/Release/resources || die
+	# Needed by bundled icu
+	# doins out/Release/icudtl.dat
 
-	newman out/Release/chrome.1 chromium${CHROMIUM_SUFFIX}.1 || die
-	newman out/Release/chrome.1 chromium-browser${CHROMIUM_SUFFIX}.1 || die
+	doins -r out/Release/locales
+	doins -r out/Release/resources
+
+	newman out/Release/chrome.1 chromium.1
+	newman out/Release/chrome.1 chromium-browser.1
 
 	# Install icons and desktop entry.
 	local branding size
@@ -583,7 +620,7 @@ src_install() {
 				*) branding="chrome/app/theme/chromium" ;;
 		esac
 		newicon -s ${size} "${branding}/product_logo_${size}.png" \
-			chromium-browser${CHROMIUM_SUFFIX}.png
+			chromium-browser.png
 	done
 
 	local mime_types="text/html;text/xml;application/xhtml+xml;"
@@ -591,23 +628,16 @@ src_install() {
 	mime_types+="x-scheme-handler/ftp;" # bug #412185
 	mime_types+="x-scheme-handler/mailto;x-scheme-handler/webcal;" # bug #416393
 	make_desktop_entry \
-		chromium-browser${CHROMIUM_SUFFIX} \
-		"Chromium${CHROMIUM_SUFFIX}" \
-		chromium-browser${CHROMIUM_SUFFIX} \
+		chromium-browser \
+		"Chromium" \
+		chromium-browser \
 		"Network;WebBrowser" \
 		"MimeType=${mime_types}\nStartupWMClass=chromium-browser"
 	sed -e "/^Exec/s/$/ %U/" -i "${ED}"/usr/share/applications/*.desktop || die
 
 	# Install GNOME default application entry (bug #303100).
-	if use gnome; then
-		dodir /usr/share/gnome-control-center/default-apps || die
-		insinto /usr/share/gnome-control-center/default-apps
-		newins "${FILESDIR}"/chromium-browser.xml chromium-browser${CHROMIUM_SUFFIX}.xml || die
-		if [[ "${CHROMIUM_SUFFIX}" != "" ]]; then
-			sed "s:chromium-browser:chromium-browser${CHROMIUM_SUFFIX}:g" -i \
-				"${ED}"/usr/share/gnome-control-center/default-apps/chromium-browser${CHROMIUM_SUFFIX}.xml
-		fi
-	fi
+	insinto /usr/share/gnome-control-center/default-apps
+	newins "${FILESDIR}"/chromium-browser.xml chromium-browser.xml
 
 	readme.gentoo_create_doc
 }
