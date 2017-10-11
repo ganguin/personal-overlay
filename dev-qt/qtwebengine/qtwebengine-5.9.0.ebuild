@@ -1,10 +1,9 @@
-# Copyright 1999-2016 Gentoo Foundation
+# Copyright 1999-2017 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
-# $Id$
 
 EAPI=6
 PYTHON_COMPAT=( python2_7 )
-inherit pax-utils python-any-r1 qt5-build
+inherit multiprocessing pax-utils python-any-r1 qt5-build
 
 DESCRIPTION="Library for rendering dynamic web content in Qt5 C++ and QML applications"
 
@@ -12,7 +11,7 @@ if [[ ${QT5_BUILD_TYPE} == release ]]; then
 	KEYWORDS="~amd64 ~x86"
 fi
 
-IUSE="bindist geolocation pax_kernel +system-ffmpeg +system-icu widgets"
+IUSE="alsa bindist geolocation pax_kernel pulseaudio +system-ffmpeg +system-icu widgets X"
 
 RDEPEND="
 	app-arch/snappy
@@ -25,13 +24,10 @@ RDEPEND="
 	~dev-qt/qtnetwork-${PV}
 	~dev-qt/qtwebchannel-${PV}[qml]
 	dev-libs/expat
-	dev-libs/jsoncpp:=
 	dev-libs/libevent:=
 	dev-libs/libxml2
 	dev-libs/libxslt
 	dev-libs/protobuf:=
-	media-libs/alsa-lib
-	media-libs/flac
 	media-libs/fontconfig
 	media-libs/freetype
 	media-libs/harfbuzz:=
@@ -40,14 +36,30 @@ RDEPEND="
 	media-libs/libwebp:=
 	media-libs/mesa
 	media-libs/opus
-	media-libs/speex
 	net-libs/libsrtp:0=
 	sys-apps/dbus
 	sys-apps/pciutils
 	sys-libs/libcap
 	sys-libs/zlib[minizip]
+	virtual/jpeg:0
+	virtual/libudev
 	x11-libs/libdrm
+	X? (
+		x11-libs/libX11
+		x11-libs/libXcomposite
+		x11-libs/libXcursor
+		x11-libs/libXdamage
+		x11-libs/libXext
+		x11-libs/libXfixes
+		x11-libs/libXi
+		x11-libs/libXrandr
+		x11-libs/libXrender
+		x11-libs/libXScrnSaver
+		x11-libs/libXtst
+	)
+	alsa? ( media-libs/alsa-lib )
 	geolocation? ( ~dev-qt/qtpositioning-${PV} )
+	pulseaudio? ( media-sound/pulseaudio:= )
 	system-ffmpeg? ( media-video/ffmpeg:0= )
 	system-icu? ( dev-libs/icu:= )
 	widgets? ( ~dev-qt/qtwidgets-${PV} )
@@ -61,23 +73,16 @@ DEPEND="${RDEPEND}
 	pax_kernel? ( sys-apps/elfix )
 "
 
-PATCHES=(
-	"${FILESDIR}/${PN}-5.7.0-fix-system-ffmpeg.patch"
-	"${FILESDIR}/${PN}-5.7.0-icu58.patch"
-	"${FILESDIR}/${PN}-5.7.0-undef-madv_free.patch"
-)
-
 src_prepare() {
-	use pax_kernel && PATCHES+=( "${FILESDIR}/${PN}-paxmark-mksnapshot.patch" )
+	use pax_kernel && PATCHES+=( "${FILESDIR}/${PN}-5.9.0-paxmark-mksnapshot.patch" )
 
-	if use system-icu; then
-		# ensure build against system headers - bug #601264
-		rm -r src/3rdparty/chromium/third_party/icu/source || die
-	fi
+	qt_use_disable_config alsa alsa src/core/config/linux.pri
+	qt_use_disable_config pulseaudio pulseaudio src/core/config/linux.pri
 
 	qt_use_disable_mod geolocation positioning \
-		src/core/core_common.pri \
-		src/core/core_gyp_generator.pro
+		mkspecs/features/configure.prf \
+		src/core/core_chromium.pri \
+		src/core/core_common.pri
 
 	qt_use_disable_mod widgets widgets src/src.pro
 
@@ -86,13 +91,13 @@ src_prepare() {
 
 src_configure() {
 	export NINJA_PATH=/usr/bin/ninja
+	export NINJAFLAGS="${NINJAFLAGS:--j$(makeopts_jobs) -l$(makeopts_loadavg "${MAKEOPTS}" 0) -v}"
 
 	local myqmakeargs=(
 		$(usex bindist '' 'WEBENGINE_CONFIG+=use_proprietary_codecs')
 		$(usex system-ffmpeg 'WEBENGINE_CONFIG+=use_system_ffmpeg' '')
 		$(usex system-icu 'WEBENGINE_CONFIG+=use_system_icu' '')
 		'WEBENGINE_CONFIG+=use_ozone'
-		'DEFINES+=USE_EVDEV'
 	)
 	qt5-build_src_configure
 }
