@@ -8,58 +8,49 @@ CHROMIUM_LANGS="am ar bg bn ca cs da de el en-GB es es-419 et fa fi fil fr gu he
 	hi hr hu id it ja kn ko lt lv ml mr ms nb nl pl pt-BR pt-PT ro ru sk sl sr
 	sv sw ta te th tr uk vi zh-CN zh-TW"
 
-inherit check-reqs chromium-2 eutils gnome2-utils flag-o-matic multilib multiprocessing pax-utils portability python-any-r1 readme.gentoo-r1 toolchain-funcs versionator virtualx xdg-utils
+inherit check-reqs chromium-2 eutils git-r3 gnome2-utils flag-o-matic multilib ninja-utils pax-utils portability python-any-r1 readme.gentoo-r1 toolchain-funcs versionator xdg-utils
+
+EGIT_REPO_URI="https://github.com/Igalia/chromium"
+EGIT_BRANCH="ozone-wayland-dev"
+EGIT_COMMIT="c421c04308c0c642d3d1568b87e9b4cd38d3ca5d"
 
 DESCRIPTION="Open-source version of Google Chrome web browser"
 HOMEPAGE="http://chromium.org/"
-SRC_URI="https://commondatastorage.googleapis.com/chromium-browser-official/${P}.tar.xz"
+SRC_URI=""
 
 LICENSE="BSD"
 SLOT="0"
 KEYWORDS="amd64 ~arm ~arm64 ~x86"
-IUSE="component-build cups gconf gnome-keyring +gtk3 +hangouts kerberos neon pic +proprietary-codecs pulseaudio selinux +suid +system-ffmpeg +system-libvpx +tcmalloc widevine X"
+IUSE="component-build cups gnome-keyring +hangouts kerberos neon pic +proprietary-codecs pulseaudio selinux +suid +system-ffmpeg +system-icu +system-libvpx +tcmalloc widevine X"
 RESTRICT="!system-ffmpeg? ( proprietary-codecs? ( bindist ) )"
-
-# Native Client binaries are compiled with different set of flags, bug #452066.
-QA_FLAGS_IGNORED=".*\.nexe"
-
-# Native Client binaries may be stripped by the build system, which uses the
-# right tools for it, bug #469144 .
-QA_PRESTRIPPED=".*\.nexe"
 
 COMMON_DEPEND="
 	app-arch/bzip2:=
 	cups? ( >=net-print/cups-1.3.11:= )
-	>=dev-libs/elfutils-0.149
 	dev-libs/expat:=
 	dev-libs/glib:2
-	dev-libs/icu:=
-	>=dev-libs/jsoncpp-0.5.0-r1:=
-	dev-libs/libxml2:=[icu]
+	system-icu? ( <dev-libs/icu-59:= )
 	dev-libs/libxslt:=
 	dev-libs/nspr:=
 	>=dev-libs/nss-3.14.3:=
 	>=dev-libs/re2-0.2016.05.01:=
-	gconf? ( >=gnome-base/gconf-2.24.0:= )
 	gnome-keyring? ( >=gnome-base/libgnome-keyring-3.12:= )
 	>=media-libs/alsa-lib-1.0.19:=
 	media-libs/fontconfig:=
 	media-libs/freetype:=
-	>=media-libs/harfbuzz-1.3.1:=[icu(+)]
-	media-libs/libexif:=
+	>=media-libs/harfbuzz-1.4.2:=[icu(-)]
 	media-libs/libjpeg-turbo:=
 	media-libs/libpng:=
 	system-libvpx? ( media-libs/libvpx:=[postproc,svc] )
-	media-libs/speex:=
+	>=media-libs/openh264-1.6.0:=
 	pulseaudio? ( media-sound/pulseaudio:= )
-	system-ffmpeg? ( >=media-video/ffmpeg-3:= )
+	system-ffmpeg? ( >=media-video/ffmpeg-3:= media-libs/opus:= )
 	sys-apps/dbus:=
 	sys-apps/pciutils:=
-	>=sys-libs/libcap-2.22:=
 	virtual/udev
 	x11-libs/cairo:=
 	x11-libs/gdk-pixbuf:2
-	x11-libs/libdrm
+	x11-libs/gtk+:3
 	X? (
 		x11-libs/libX11:=
 		x11-libs/libXcomposite:=
@@ -68,7 +59,6 @@ COMMON_DEPEND="
 		x11-libs/libXext:=
 		x11-libs/libXfixes:=
 		>=x11-libs/libXi-1.6.0:=
-		x11-libs/libXinerama:=
 		x11-libs/libXrandr:=
 		x11-libs/libXrender:=
 		x11-libs/libXScrnSaver:=
@@ -85,32 +75,30 @@ COMMON_DEPEND="
 RDEPEND="${COMMON_DEPEND}
 	!=www-client/chromium-9999
 	!<www-plugins/chrome-binary-plugins-57
+	x11-misc/xdg-utils
 	virtual/opengl
 	virtual/ttf-fonts
-	!gtk3? ( x11-libs/gtk+:2 )
-	gtk3? ( x11-libs/gtk+:3 )
 	selinux? ( sec-policy/selinux-chromium )
 	tcmalloc? ( !<x11-drivers/nvidia-drivers-331.20 )
 	widevine? ( www-plugins/chrome-binary-plugins[widevine(-)] )
 "
 # dev-vcs/git - https://bugs.gentoo.org/593476
+# sys-apps/sandbox - https://crbug.com/586444
 DEPEND="${COMMON_DEPEND}
 	>=app-arch/gzip-1.7
 	!arm? (
 		dev-lang/yasm
 	)
 	dev-lang/perl
-	dev-perl/JSON
 	>=dev-util/gperf-3.0.3
-	dev-util/ninja
-	net-libs/nodejs
+	>=dev-util/ninja-1.7.2
+	>=net-libs/nodejs-4.6.1
 	sys-apps/hwids[usb(+)]
+	tcmalloc? ( !<sys-apps/sandbox-2.11 )
 	>=sys-devel/bison-2.4.3
 	sys-devel/flex
 	virtual/pkgconfig
 	dev-vcs/git
-	!gtk3? ( x11-libs/gtk+:2 )
-	gtk3? ( x11-libs/gtk+:3 )
 	$(python_gen_any_dep '
 		dev-python/beautifulsoup:python-2[${PYTHON_USEDEP}]
 		>=dev-python/beautifulsoup-4.3.2:4[${PYTHON_USEDEP}]
@@ -146,15 +134,15 @@ are not displayed properly:
 - media-fonts/wqy-microhei
 - media-fonts/wqy-zenhei
 
-Depending on your desktop environment, you may need
-to install additional packages to get icons on the Downloads page.
-
-For KDE, the required package is kde-frameworks/oxygen-icons.
-
-For other desktop environments, try one of the following:
-- x11-themes/gnome-icon-theme
-- x11-themes/tango-icon-theme
+To fix broken icons on the Downloads page, you should install an icon
+theme that covers the appropriate MIME types, and configure this as your
+GTK+ icon theme.
 "
+
+PATCHES=(
+	"${FILESDIR}/${PN}-widevine-r1.patch"
+	"${FILESDIR}/${PN}-FORTIFY_SOURCE-r2.patch"
+)
 
 pre_build_checks() {
 	if [[ ${MERGE_TYPE} != binary ]]; then
@@ -163,9 +151,9 @@ pre_build_checks() {
 			# bugs: #601654
 			die "At least clang 3.9.1 is required"
 		fi
-		if tc-is-gcc && ! version_is_at_least 4.8 "$(gcc-version)"; then
-			# bugs: #535730, #525374, #518668, #600288
-			die "At least gcc 4.8 is required"
+		if tc-is-gcc && ! version_is_at_least 5.0 "$(gcc-version)"; then
+			# bugs: #535730, #525374, #518668, #600288, #627356
+			die "At least gcc 5.0 is required"
 		fi
 	fi
 
@@ -197,19 +185,19 @@ pkg_setup() {
 }
 
 src_prepare() {
-	local PATCHES=(
-		"${FILESDIR}/${PN}-widevine-r1.patch"
-		"${FILESDIR}/${PN}-FORTIFY_SOURCE.patch"
-		"${FILESDIR}/${PN}-gn-bootstrap-r2.patch"
-		"${FILESDIR}/skia-avx2.patch"
-	)
-
-	use system-ffmpeg && PATCHES+=( "${FILESDIR}/${PN}-system-ffmpeg-r4.patch" )
-
 	default
 
-	mkdir -p third_party/node/linux/node-linux-x64/bin || die
-	ln -s "${EPREFIX}"/usr/bin/node third_party/node/linux/node-linux-x64/bin/node || die
+	cd ..
+	git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+	ln -s ${P} src
+	cp -r /usr/portage/distfiles/chromium-gclient-cache chromium
+	python2 depot_tools/gclient.py config --cache-dir chromium --name=${P} --unmanaged https://github.com/Igalia/chromium
+	python2 depot_tools/gclient.py sync --cache-dir chromium
+	cd -
+	sed -i 's/icu::toUCharPtr(\(result\|utf16\).getBuffer())/\1.getBuffer()/' v8/src/runtime/runtime-intl.cc third_party/WebKit/Source/platform/graphics/LoggingCanvas.cpp
+
+	#mkdir -p third_party/node/linux/node-linux-x64/bin || die
+	#ln -s "${EPREFIX}"/usr/bin/node third_party/node/linux/node-linux-x64/bin/node || die
 
 	local keeplibs=(
 		base/third_party/dmg_fp
@@ -221,7 +209,6 @@ src_prepare() {
 		base/third_party/valgrind
 		base/third_party/xdg_mime
 		base/third_party/xdg_user_dirs
-		breakpad/src/third_party/curl
 		chrome/third_party/mozilla_security_manager
 		courgette/third_party
 		net/third_party/mozilla_security_manager
@@ -229,12 +216,15 @@ src_prepare() {
 		third_party/WebKit
 		third_party/analytics
 		third_party/angle
-		third_party/angle/src/common/third_party/numerics
+		third_party/angle/src/common/third_party/base
+		third_party/angle/src/common/third_party/murmurhash
 		third_party/angle/src/third_party/compiler
 		third_party/angle/src/third_party/libXNVCtrl
-		third_party/angle/src/third_party/murmurhash
 		third_party/angle/src/third_party/trace_event
+		third_party/blink
 		third_party/boringssl
+		third_party/breakpad
+		third_party/breakpad/breakpad/src/third_party/curl
 		third_party/brotli
 		third_party/cacheinvalidation
 		third_party/catapult
@@ -246,18 +236,23 @@ src_prepare() {
 		third_party/catapult/tracing/third_party/gl-matrix
 		third_party/catapult/tracing/third_party/jszip
 		third_party/catapult/tracing/third_party/mannwhitneyu
+		third_party/catapult/tracing/third_party/oboe
 		third_party/ced
 		third_party/cld_2
 		third_party/cld_3
+		third_party/crc32c
 		third_party/cros_system_api
 		third_party/devscripts
 		third_party/dom_distiller_js
 		third_party/fips181
 		third_party/flatbuffers
 		third_party/flot
+		third_party/freetype
+		third_party/glslang-angle
 		third_party/google_input_tools
 		third_party/google_input_tools/third_party/closure_library
 		third_party/google_input_tools/third_party/closure_library/third_party/closure
+		third_party/googletest
 		third_party/hunspell
 		third_party/iccjpeg
 		third_party/inspector_protocol
@@ -272,9 +267,8 @@ src_prepare() {
 		third_party/libsecret
 		third_party/libsrtp
 		third_party/libudev
-		third_party/libusb
 		third_party/libwebm
-		third_party/libxml/chromium
+		third_party/libxml
 		third_party/libyuv
 		third_party/lss
 		third_party/lzma_sdk
@@ -283,22 +277,19 @@ src_prepare() {
 		third_party/modp_b64
 		third_party/mt19937ar
 		third_party/node
-		third_party/node/node_modules/vulcanize/third_party/UglifyJS2
-		third_party/openh264
+		third_party/node/node_modules/polymer-bundler/lib/third_party/UglifyJS2
 		third_party/openmax_dl
-		third_party/opus
 		third_party/ots
 		third_party/pdfium
 		third_party/pdfium/third_party/agg23
 		third_party/pdfium/third_party/base
+		third_party/pdfium/third_party/build
 		third_party/pdfium/third_party/bigint
 		third_party/pdfium/third_party/freetype
-		third_party/pdfium/third_party/lcms2-2.6
-		third_party/pdfium/third_party/libjpeg
+		third_party/pdfium/third_party/lcms
 		third_party/pdfium/third_party/libopenjpeg20
 		third_party/pdfium/third_party/libpng16
 		third_party/pdfium/third_party/libtiff
-		third_party/pdfium/third_party/zlib_v128
 		third_party/ply
 		third_party/polymer
 		third_party/protobuf
@@ -306,18 +297,25 @@ src_prepare() {
 		third_party/qcms
 		third_party/sfntly
 		third_party/skia
+		third_party/skia/third_party/vulkan
+		third_party/skia/third_party/gif
 		third_party/smhasher
+		third_party/spirv-headers
+		third_party/spirv-tools-angle
 		third_party/sqlite
-		third_party/tcmalloc
+		third_party/swiftshader
+		third_party/swiftshader/third_party/llvm-subzero
+		third_party/swiftshader/third_party/subzero
 		third_party/usrsctp
 		third_party/wayland
 		third_party/wayland-protocols
+		third_party/vulkan
+		third_party/vulkan-validation-layers
 		third_party/web-animations-js
 		third_party/webdriver
 		third_party/webrtc
 		third_party/widevine
 		third_party/woff2
-		third_party/x86inc
 		third_party/zlib/google
 		url/third_party/mozilla
 		v8/src/third_party/valgrind
@@ -332,15 +330,37 @@ src_prepare() {
 		third_party/yasm/run_yasm.py
 	)
 	if ! use system-ffmpeg; then
-		keeplibs+=( third_party/ffmpeg )
+		keeplibs+=( third_party/ffmpeg third_party/opus )
+	fi
+	if ! use system-icu; then
+		keeplibs+=( third_party/icu )
 	fi
 	if ! use system-libvpx; then
 		keeplibs+=( third_party/libvpx )
 		keeplibs+=( third_party/libvpx/source/libvpx/third_party/x86inc )
 	fi
+	if use tcmalloc; then
+		keeplibs+=( third_party/tcmalloc )
+	fi
 
 	# Remove most bundled libraries. Some are still needed.
 	build/linux/unbundle/remove_bundled_libraries.py "${keeplibs[@]}" --do-remove || die
+}
+
+bootstrap_gn() {
+	if tc-is-cross-compiler; then
+		local -x AR=${BUILD_AR}
+		local -x CC=${BUILD_CC}
+		local -x CXX=${BUILD_CXX}
+		local -x NM=${BUILD_NM}
+		local -x CFLAGS=${BUILD_CFLAGS}
+		local -x CXXFLAGS=${BUILD_CXXFLAGS}
+		local -x LDFLAGS=${BUILD_LDFLAGS}
+	fi
+	einfo "Building GN..."
+	set -- tools/gn/bootstrap/bootstrap.py -s -v --no-clean
+	echo "$@"
+	"$@" || die
 }
 
 src_configure() {
@@ -353,14 +373,16 @@ src_configure() {
 	# for development and debugging.
 	myconf_gn+=" is_component_build=$(usex component-build true false)"
 
+	myconf_gn+=" use_allocator=$(usex tcmalloc \"tcmalloc\" \"none\")"
+
 	# Disable nacl, we can't build without pnacl (http://crbug.com/269560).
 	myconf_gn+=" enable_nacl=false"
 
 	# Use system-provided libraries.
+	# TODO: freetype (https://bugs.chromium.org/p/pdfium/issues/detail?id=733).
 	# TODO: use_system_hunspell (upstream changes needed).
 	# TODO: use_system_libsrtp (bug #459932).
-	# TODO: use_system_libusb (http://crbug.com/266149).
-	# TODO: use_system_opus (https://code.google.com/p/webrtc/issues/detail?id=3077).
+	# TODO: xml (bug #616818).
 	# TODO: use_system_protobuf (bug #525560).
 	# TODO: use_system_ssl (http://crbug.com/58087).
 	# TODO: use_system_sqlite (http://crbug.com/22208).
@@ -369,19 +391,22 @@ src_configure() {
 	local gn_system_libraries=(
 		flac
 		harfbuzz-ng
-		icu
+		libdrm
 		libjpeg
 		libpng
 		libwebp
-		libxml
 		libxslt
+		openh264
 		re2
 		snappy
 		yasm
 		zlib
 	)
 	if use system-ffmpeg; then
-		gn_system_libraries+=( ffmpeg )
+		gn_system_libraries+=( ffmpeg opus )
+	fi
+	if use system-icu; then
+		gn_system_libraries+=( icu )
 	fi
 	if use system-libvpx; then
 		gn_system_libraries+=( libvpx )
@@ -392,13 +417,12 @@ src_configure() {
 	myconf_gn+=" enable_hangout_services_extension=$(usex hangouts true false)"
 	myconf_gn+=" enable_widevine=$(usex widevine true false)"
 	myconf_gn+=" use_cups=$(usex cups true false)"
-	myconf_gn+=" use_gconf=$(usex gconf true false)"
+	myconf_gn+=" use_gconf=false"
 	myconf_gn+=" use_gnome_keyring=$(usex gnome-keyring true false)"
-	myconf_gn+=" use_gtk3=$(usex gtk3 true false)"
 	myconf_gn+=" use_kerberos=$(usex kerberos true false)"
 	myconf_gn+=" use_pulseaudio=$(usex pulseaudio true false)"
 
-	myconf_gn+=" use_ozone=true ozone_platform_wayland=true ozone_auto_platforms=false"
+	myconf_gn+=" use_ozone=true ozone_platform_headless=true ozone_platform_wayland=true ozone_auto_platforms=false ozone_platform=\"wayland\""
 	myconf_gn+=" enable_package_mash_services=true"
 
 	# TODO: link_pulseaudio=true for GN.
@@ -406,7 +430,7 @@ src_configure() {
 	myconf_gn+=" fieldtrial_testing_like_official_build=true"
 
 	if tc-is-clang; then
-		myconf_gn+=" is_clang=true clang_base_path=\"/usr\" clang_use_chrome_plugins=false"
+		myconf_gn+=" is_clang=true clang_use_chrome_plugins=false"
 	else
 		myconf_gn+=" is_clang=false"
 	fi
@@ -414,7 +438,7 @@ src_configure() {
 	# Never use bundled gold binary. Disable gold linker flags for now.
 	# Do not use bundled clang.
 	# Trying to use gold results in linker crash.
-	myconf_gn+=" use_gold=false use_sysroot=false linux_use_bundled_binutils=false"
+	myconf_gn+=" use_gold=false use_sysroot=false linux_use_bundled_binutils=false use_custom_libcxx=false"
 
 	ffmpeg_branding="$(usex proprietary-codecs Chrome Chromium)"
 	myconf_gn+=" proprietary_codecs=$(usex proprietary-codecs true false)"
@@ -433,16 +457,16 @@ src_configure() {
 
 	local myarch="$(tc-arch)"
 	if [[ $myarch = amd64 ]] ; then
-		target_arch=x64
+		myconf_gn+=" target_cpu=\"x64\""
 		ffmpeg_target_arch=x64
 	elif [[ $myarch = x86 ]] ; then
-		target_arch=ia32
+		myconf_gn+=" target_cpu=\"x86\""
 		ffmpeg_target_arch=ia32
 	elif [[ $myarch = arm64 ]] ; then
-		target_arch=arm64
+		myconf_gn+=" target_cpu=\"arm64\""
 		ffmpeg_target_arch=arm64
 	elif [[ $myarch = arm ]] ; then
-		target_arch=arm
+		myconf_gn+=" target_cpu=\"arm\""
 		ffmpeg_target_arch=$(usex neon arm-neon arm)
 	else
 		die "Failed to determine target arch, got '$myarch'."
@@ -475,19 +499,19 @@ src_configure() {
 	# Make sure the build system will use the right tools, bug #340795.
 	tc-export AR CC CXX NM
 
+	# Define a custom toolchain for GN
+	myconf_gn+=" custom_toolchain=\"//build/toolchain/linux/unbundle:default\""
+
+	if tc-is-cross-compiler; then
+		tc-export BUILD_{AR,CC,CXX,NM}
+		myconf_gn+=" host_toolchain=\"//build/toolchain/linux/unbundle:host\""
+		myconf_gn+=" v8_snapshot_toolchain=\"//build/toolchain/linux/unbundle:host\""
+	else
+		myconf_gn+=" host_toolchain=\"//build/toolchain/linux/unbundle:default\""
+	fi
+
 	# https://bugs.gentoo.org/588596
 	append-cxxflags $(test-flags-CXX -fno-delete-null-pointer-checks)
-
-	# Define a custom toolchain for GN
-	myconf_gn+=" custom_toolchain=\"${FILESDIR}/toolchain:default\""
-
-	# Tools for building programs to be executed on the build system, bug #410883.
-	if tc-is-cross-compiler; then
-		export AR_host=$(tc-getBUILD_AR)
-		export CC_host=$(tc-getBUILD_CC)
-		export CXX_host=$(tc-getBUILD_CXX)
-		export NM_host=$(tc-getBUILD_NM)
-	fi
 
 	# Bug 491582.
 	export TMPDIR="${WORKDIR}/temp"
@@ -509,32 +533,12 @@ src_configure() {
 		popd > /dev/null || die
 	fi
 
-	third_party/libaddressinput/chromium/tools/update-strings.py || die
-
-	touch chrome/test/data/webui/i18n_process_css_test.html || die
+	bootstrap_gn
 
 	einfo "Configuring Chromium..."
-	# TODO: bootstrapped gn binary hangs when using tcmalloc with portage's sandbox.
-	tools/gn/bootstrap/bootstrap.py -v --no-clean --gn-gen-args "${myconf_gn} use_allocator=\"none\"" || die
-	myconf_gn+=" use_allocator=$(usex tcmalloc \"tcmalloc\" \"none\")"
-	out/Release/gn gen --args="${myconf_gn}" out/Release || die
-}
-
-eninja() {
-	if [[ -z ${NINJAOPTS+set} ]]; then
-		local jobs=$(makeopts_jobs)
-		local loadavg=$(makeopts_loadavg)
-
-		if [[ ${MAKEOPTS} == *-j* && ${jobs} != 999 ]]; then
-			NINJAOPTS+=" -j ${jobs}"
-		fi
-		if [[ ${MAKEOPTS} == *-l* && ${loadavg} != 999 ]]; then
-			NINJAOPTS+=" -l ${loadavg}"
-		fi
-	fi
-	set -- ninja -v ${NINJAOPTS} "$@"
+	set -- out/Release/gn gen --args="${myconf_gn}" out/Release
 	echo "$@"
-	"$@"
+	"$@" || die
 }
 
 src_compile() {
@@ -544,8 +548,13 @@ src_compile() {
 	fi
 
 	# Build mksnapshot and pax-mark it.
-	eninja -C out/Release mksnapshot || die
-	pax-mark m out/Release/mksnapshot
+	if tc-is-cross-compiler; then
+		eninja -C out/Release host/mksnapshot || die
+		pax-mark m out/Release/host/mksnapshot
+	else
+		eninja -C out/Release mksnapshot || die
+		pax-mark m out/Release/mksnapshot
+	fi
 
 	# Even though ninja autodetects number of CPUs, we respect
 	# user's options, for debugging with -j 1 or any other reason.
@@ -565,13 +574,6 @@ src_install() {
 	fi
 
 	doexe out/Release/chromedriver
-
-	# if ! use arm; then
-	#	doexe out/Release/nacl_helper{,_bootstrap} || die
-	#	insinto "${CHROMIUM_HOME}"
-	#	doins out/Release/nacl_irt_*.nexe || die
-	#	doins out/Release/libppGoogleNaClPluginChrome.so || die
-	# fi
 
 	local sedargs=( -e "s:/usr/lib/:/usr/$(get_libdir)/:g" )
 	sed "${sedargs[@]}" "${FILESDIR}/chromium-launcher-r3.sh" > chromium-launcher.sh || die
@@ -601,13 +603,21 @@ src_install() {
 	insinto "${CHROMIUM_HOME}"
 	doins out/Release/*.bin
 	doins out/Release/*.pak
-	doins out/Release/*.so
+	if compgen -G out/Release/*.so; then
+		doins out/Release/*.so
+	fi
 
-	# Needed by bundled icu
-	# doins out/Release/icudtl.dat
+	if ! use system-icu; then
+		doins out/Release/icudtl.dat
+	fi
 
 	doins -r out/Release/locales
 	doins -r out/Release/resources
+
+	if test -e out/Release/swiftshader; then
+		insinto "${CHROMIUM_HOME}/swiftshader"
+		doins out/Release/swiftshader/*.so
+	fi
 
 	newman out/Release/chrome.1 chromium.1
 	newman out/Release/chrome.1 chromium-browser.1
