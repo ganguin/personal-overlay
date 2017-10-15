@@ -12,7 +12,7 @@ inherit check-reqs chromium-2 eutils git-r3 gnome2-utils flag-o-matic multilib n
 
 EGIT_REPO_URI="https://github.com/Igalia/chromium"
 EGIT_BRANCH="ozone-wayland-dev"
-#EGIT_COMMIT=""
+EGIT_COMMIT="9e8a24b42142b0789fb83ea75d44be522e15ee4a"
 
 DESCRIPTION="Open-source version of Google Chrome web browser"
 HOMEPAGE="http://chromium.org/"

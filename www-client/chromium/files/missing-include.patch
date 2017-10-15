@@ -1,0 +1,12 @@
+diff --git a/third_party/webrtc/p2p/base/port.cc b/third_party/webrtc/p2p/base/port.cc
+index a1b478d1162b..16124870f3f5 100644
+--- a/third_party/webrtc/p2p/base/port.cc
++++ b/third_party/webrtc/p2p/base/port.cc
+@@ -11,6 +11,7 @@
+ #include "p2p/base/port.h"
+ 
+ #include <algorithm>
++#include <math.h>
+ #include <vector>
+ 
+ #include "p2p/base/common.h"
