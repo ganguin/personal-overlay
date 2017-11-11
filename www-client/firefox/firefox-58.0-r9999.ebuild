@@ -30,7 +30,7 @@ inherit git-r3 check-reqs flag-o-matic toolchain-funcs eutils gnome2-utils mozco
 DESCRIPTION="Firefox Web Browser"
 HOMEPAGE="http://www.mozilla.com/firefox"
 
-KEYWORDS="~amd64"
+KEYWORDS="amd64"
 
 SLOT="0"
 LICENSE="MPL-2.0 GPL-2 LGPL-2.1"
@@ -38,6 +38,7 @@ IUSE="bindist eme-free +gmp-autoupdate hardened hwaccel jack nsplugin pgo selinu
 RESTRICT="!bindist? ( bindist )"
 
 EGIT_REPO_URI="https://github.com/stransky/gecko-dev"
+EGIT_COMMIT="25ad8e2cc8d69d160ea936c007549d57cda88e1b"
 
 ASM_DEPEND=">=dev-lang/yasm-1.1"
 

@@ -1,0 +1,12 @@
+DEFINED_PHASES=prepare unpack
+DEPEND=>=dev-vcs/git-1.8.2.1
+DESCRIPTION=A primitive drawing library targeted at Wayland
+EAPI=5
+HOMEPAGE=https://github.com/michaelforney/wld
+IUSE=debug drm static-libs video_cards_intel video_cards_nouveau
+LICENSE=MIT
+RDEPEND=x11-libs/pixman media-libs/fontconfig video_cards_intel? ( x11-libs/libdrm[video_cards_intel] ) video_cards_nouveau? ( x11-libs/libdrm[video_cards_nouveau] )
+REQUIRED_USE=video_cards_intel? ( drm ) video_cards_nouveau? ( drm )
+SLOT=0
+_eclasses_=epatch	8233751dc5105a6ae8fcd86ce2bb0247	estack	43ddf5aaffa7a8d0482df54d25a66a1f	eutils	9c113d6a64826c40154cad7be15d95ea	git-r3	4f7ddb4119309845d6687213171ab445	ltprune	2770eed66a9b8ef944714cd0e968182e	multilib	97f470f374f2e94ccab04a2fb21d811e	toolchain-funcs	185a06792159ca143528e7010368e8af
+_md5_=025f909cad99b0b67c326174bd578454
