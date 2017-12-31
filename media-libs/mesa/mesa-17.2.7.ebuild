@@ -25,7 +25,7 @@ if [[ $PV == 9999 ]]; then
 	SRC_URI=""
 else
 	SRC_URI="https://mesa.freedesktop.org/archive/${MY_P}.tar.xz"
-	KEYWORDS="~alpha amd64 ~arm ~arm64 ~hppa ~ia64 ~mips ~ppc ~ppc64 ~s390 ~sh ~sparc ~x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~arm-linux ~x86-linux ~sparc-solaris ~x64-solaris ~x86-solaris"
+	KEYWORDS="~alpha amd64 ~arm ~arm64 ~hppa ~ia64 ~mips ~ppc ~ppc64 ~s390 ~sh sparc x86 ~amd64-fbsd ~x86-fbsd ~amd64-linux ~arm-linux ~x86-linux ~sparc-solaris ~x64-solaris ~x86-solaris"
 fi
 
 LICENSE="MIT"
@@ -33,7 +33,7 @@ SLOT="0"
 RESTRICT="!bindist? ( bindist )"
 
 RADEON_CARDS="r100 r200 r300 r600 radeon radeonsi"
-VIDEO_CARDS="${RADEON_CARDS} freedreno i915 i965 imx intel nouveau vc4 vivante vmware"
+VIDEO_CARDS="${RADEON_CARDS} freedreno i915 i965 imx intel nouveau vc4 virgl vivante vmware"
 for card in ${VIDEO_CARDS}; do
 	IUSE_VIDEO_CARDS+=" video_cards_${card}"
 done
@@ -71,6 +71,7 @@ REQUIRED_USE="
 	video_cards_r600?   ( gallium )
 	video_cards_radeonsi?   ( gallium llvm )
 	video_cards_vc4? ( gallium )
+	video_cards_virgl? ( gallium )
 	video_cards_vivante? ( gallium gbm )
 	video_cards_vmware? ( gallium )
 "
@@ -100,7 +101,6 @@ RDEPEND="
 	llvm? (
 		video_cards_radeonsi? (
 			virtual/libelf:0=[${MULTILIB_USEDEP}]
-			vulkan? ( >=sys-devel/llvm-3.9.0:=[${MULTILIB_USEDEP}] )
 		)
 		video_cards_r600? (
 			virtual/libelf:0=[${MULTILIB_USEDEP}]
@@ -108,7 +108,6 @@ RDEPEND="
 		video_cards_radeon? (
 			virtual/libelf:0=[${MULTILIB_USEDEP}]
 		)
-		>=sys-devel/llvm-3.6.0:=[${MULTILIB_USEDEP}]
 	)
 	opencl? (
 				app-eselect/eselect-opencl
@@ -142,20 +141,84 @@ RDEPEND="${RDEPEND}
 	video_cards_radeonsi? ( ${LIBDRM_DEPSTRING}[video_cards_amdgpu] )
 "
 
-# FIXME: kill the sys-devel/llvm[video_cards_radeon] compat once
-# LLVM < 3.9 is out of the game
+# Please keep the LLVM dependency block separate. Since LLVM is slotted,
+# we need to *really* make sure we're not pulling one than more slot
+# simultaneously.
+#
+# How to use it:
+# 1. List all the working slots (with min versions) in ||, newest first.
+# 2. Update the := to specify *max* version, e.g. < 7.
+# 3. Specify LLVM_MAX_SLOT, e.g. 6.
+LLVM_MAX_SLOT="5"
+LLVM_DEPSTR="
+	|| (
+		sys-devel/llvm:5[${MULTILIB_USEDEP}]
+		sys-devel/llvm:4[${MULTILIB_USEDEP}]
+		>=sys-devel/llvm-3.9.0:0[${MULTILIB_USEDEP}]
+	)
+	<sys-devel/llvm-6:=[${MULTILIB_USEDEP}]
+"
+LLVM_DEPSTR_AMDGPU=${LLVM_DEPSTR//]/,llvm_targets_AMDGPU(-)]}
+CLANG_DEPSTR=${LLVM_DEPSTR//llvm/clang}
+CLANG_DEPSTR_AMDGPU=${CLANG_DEPSTR//]/,llvm_targets_AMDGPU(-)]}
+RDEPEND="${RDEPEND}
+	llvm? (
+		opencl? (
+			video_cards_r600? (
+				${CLANG_DEPSTR_AMDGPU}
+			)
+			!video_cards_r600? (
+				video_cards_radeonsi? (
+					${CLANG_DEPSTR_AMDGPU}
+				)
+			)
+			!video_cards_r600? (
+				!video_cards_radeonsi? (
+					video_cards_radeon? (
+						${CLANG_DEPSTR_AMDGPU}
+					)
+				)
+			)
+			!video_cards_r600? (
+				!video_cards_radeon? (
+					!video_cards_radeonsi? (
+						${CLANG_DEPSTR}
+					)
+				)
+			)
+		)
+		!opencl? (
+			video_cards_r600? (
+				${LLVM_DEPSTR_AMDGPU}
+			)
+			!video_cards_r600? (
+				video_cards_radeonsi? (
+					${LLVM_DEPSTR_AMDGPU}
+				)
+			)
+			!video_cards_r600? (
+				!video_cards_radeonsi? (
+					video_cards_radeon? (
+						${LLVM_DEPSTR_AMDGPU}
+					)
+				)
+			)
+			!video_cards_r600? (
+				!video_cards_radeon? (
+					!video_cards_radeonsi? (
+						${LLVM_DEPSTR}
+					)
+				)
+			)
+		)
+	)
+"
+unset {LLVM,CLANG}_DEPSTR{,_AMDGPU}
+
 DEPEND="${RDEPEND}
 	${PYTHON_DEPS}
-	llvm? (
-		video_cards_radeonsi? ( || (
-			sys-devel/llvm[llvm_targets_AMDGPU]
-			sys-devel/llvm[video_cards_radeon]
-		) )
-	)
 	opencl? (
-				>=sys-devel/llvm-3.6.0:=[${MULTILIB_USEDEP}]
-				>=sys-devel/clang-3.6.0:=[${MULTILIB_USEDEP}]
-				>=sys-devel/gcc-4.6
+		>=sys-devel/gcc-4.6
 	)
 	sys-devel/gettext
 	virtual/pkgconfig
@@ -192,6 +255,19 @@ x86? (
 	)
 )"
 
+llvm_check_deps() {
+	local flags=${MULTILIB_USEDEP}
+	if use video_cards_r600 || use video_cards_radeon || use video_cards_radeonsi
+	then
+		flags+=",llvm_targets_AMDGPU(-)"
+	fi
+
+	if use opencl; then
+		has_version "sys-devel/clang[${flags}]" || return 1
+	fi
+	has_version "sys-devel/llvm[${flags}]"
+}
+
 pkg_setup() {
 	# warning message for bug 459306
 	if use llvm && has_version sys-devel/llvm[!debug=]; then
@@ -199,7 +275,7 @@ pkg_setup() {
 		ewarn "detected! This can cause problems. For details, see bug 459306."
 	fi
 
-	if use llvm || use opencl; then
+	if use llvm; then
 		llvm_pkg_setup
 	fi
 	python-any-r1_pkg_setup
@@ -281,6 +357,8 @@ multilib_src_configure() {
 				--with-clang-libdir="${EPREFIX}/usr/lib"
 				"
 		fi
+
+		gallium_enable video_cards_virgl virgl
 	fi
 
 	if use vulkan; then

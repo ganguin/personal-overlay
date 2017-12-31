@@ -30,7 +30,7 @@ inherit git-r3 check-reqs flag-o-matic toolchain-funcs eutils gnome2-utils mozco
 DESCRIPTION="Firefox Web Browser"
 HOMEPAGE="http://www.mozilla.com/firefox"
 
-KEYWORDS="~amd64"
+KEYWORDS="amd64"
 
 SLOT="0"
 LICENSE="MPL-2.0 GPL-2 LGPL-2.1"
@@ -38,6 +38,7 @@ IUSE="bindist eme-free +gmp-autoupdate hardened hwaccel jack nsplugin pgo selinu
 RESTRICT="!bindist? ( bindist )"
 
 EGIT_REPO_URI="https://github.com/stransky/gecko-dev"
+EGIT_COMMIT="0c246d7027131f3d023f3f5d0183682addfdcd71"
 
 ASM_DEPEND=">=dev-lang/yasm-1.1"
 
@@ -215,7 +216,7 @@ src_configure() {
 
 	# workaround for funky/broken upstream configure...
 	SHELL="${SHELL:-${EPREFIX}/bin/bash}" \
-	./mach configure
+	./mach configure || die
 }
 
 src_compile() {
@@ -244,7 +245,7 @@ src_compile() {
 		virtx emake -f client.mk profiledbuild || die "virtx emake failed"
 	else
 		MOZ_MAKE_FLAGS="${MAKEOPTS}" SHELL="${SHELL:-${EPREFIX}/bin/bash}" \
-		emake -f client.mk realbuild
+		./mach build || die
 	fi
 
 }
@@ -313,7 +314,7 @@ sticky_pref("devtools.theme", "dark");
 PROFILE_EOF
 
 	else
-		sizes="16 22 24 32 256"
+		sizes="16 22 24 32 128 256"
 		icon_path="${S}/browser/branding/official"
 		icon="${PN}"
 		name="Mozilla Firefox"
@@ -324,11 +325,8 @@ PROFILE_EOF
 		insinto "/usr/share/icons/hicolor/${size}x${size}/apps"
 		newins "${icon_path}/default${size}.png" "${icon}.png"
 	done
-	# The 128x128 icon has a different name
-	insinto "/usr/share/icons/hicolor/128x128/apps"
-	newins "${icon_path}/mozicon128.png" "${icon}.png"
 	# Install a 48x48 icon into /usr/share/pixmaps for legacy DEs
-	newicon "${icon_path}/content/icon48.png" "${icon}.png"
+	newicon "${icon_path}/default48.png" "${icon}.png"
 	newmenu "${FILESDIR}/icon/${PN}.desktop" "${PN}.desktop"
 	sed -i -e "s:@NAME@:${name}:" -e "s:@ICON@:${icon}:" \
 		"${ED}/usr/share/applications/${PN}.desktop" || die

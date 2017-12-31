@@ -11,8 +11,8 @@ HOMEPAGE="https://git.gnome.org/browse/goffice/"
 
 LICENSE="GPL-2"
 SLOT="0.10"
-KEYWORDS="~alpha ~amd64 ~arm ~ia64 ~mips ~ppc ~ppc64 ~sparc ~x86 ~x86-fbsd ~amd64-linux ~x86-linux ~x64-solaris"
-IUSE="+introspection"
+KEYWORDS="~alpha amd64 ~arm ~ia64 ~mips ~ppc ~ppc64 ~sparc ~x86 ~x86-fbsd ~amd64-linux ~x86-linux ~x64-solaris"
+IUSE="+introspection X"
 
 # FIXME: add lasem to tree
 RDEPEND="
@@ -24,8 +24,10 @@ RDEPEND="
 	>=dev-libs/libxml2-2.4.12:2
 	>=x11-libs/pango-1.24:=
 	>=x11-libs/cairo-1.10:=[svg]
-	x11-libs/libXext:=
-	x11-libs/libXrender:=
+	X? (
+		x11-libs/libXext:=
+		x11-libs/libXrender:=
+	)
 	>=x11-libs/gdk-pixbuf-2.22:2
 	>=x11-libs/gtk+-3.8.7:3
 	introspection? (
