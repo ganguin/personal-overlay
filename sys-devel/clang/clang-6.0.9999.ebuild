@@ -1,4 +1,4 @@
-# Copyright 1999-2017 Gentoo Foundation
+# Copyright 1999-2018 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI=6
@@ -8,31 +8,35 @@ EAPI=6
 CMAKE_MIN_VERSION=3.7.0-r1
 PYTHON_COMPAT=( python2_7 )
 
-inherit cmake-utils flag-o-matic llvm multilib-minimal \
-	python-single-r1 toolchain-funcs pax-utils versionator
+inherit cmake-utils eapi7-ver flag-o-matic git-r3 llvm \
+	multilib-minimal pax-utils python-single-r1 toolchain-funcs
 
 DESCRIPTION="C language family frontend for LLVM"
 HOMEPAGE="https://llvm.org/"
-SRC_URI="https://releases.llvm.org/${PV/_//}/cfe-${PV/_/}.src.tar.xz
-	https://releases.llvm.org/${PV/_//}/clang-tools-extra-${PV/_/}.src.tar.xz
-	!doc? ( https://dev.gentoo.org/~mgorny/dist/llvm/llvm-manpages-${PV}.tar.bz2 )
-	test? ( https://releases.llvm.org/${PV/_//}/llvm-${PV/_/}.src.tar.xz )"
+SRC_URI=""
+EGIT_REPO_URI="https://git.llvm.org/git/clang.git
+	https://github.com/llvm-mirror/clang.git"
+EGIT_BRANCH="release_60"
 
 # Keep in sync with sys-devel/llvm
 ALL_LLVM_TARGETS=( AArch64 AMDGPU ARM BPF Hexagon Lanai Mips MSP430
-	NVPTX PowerPC RISCV Sparc SystemZ X86 XCore )
+	NVPTX PowerPC Sparc SystemZ X86 XCore )
 ALL_LLVM_TARGETS=( "${ALL_LLVM_TARGETS[@]/#/llvm_targets_}" )
 LLVM_TARGET_USEDEPS=${ALL_LLVM_TARGETS[@]/%/?}
 
 LICENSE="UoI-NCSA"
-SLOT="$(get_major_version)"
-KEYWORDS="amd64 ~arm64 x86"
+SLOT="$(ver_cut 1)"
+KEYWORDS=""
 IUSE="debug default-compiler-rt default-libcxx doc +static-analyzer
-	test xml elibc_musl kernel_FreeBSD ${ALL_LLVM_TARGETS[*]}"
+	test xml z3 kernel_FreeBSD ${ALL_LLVM_TARGETS[*]}"
+RESTRICT="!test? ( test )"
 
 RDEPEND="
 	~sys-devel/llvm-${PV}:${SLOT}=[debug=,${LLVM_TARGET_USEDEPS// /,},${MULTILIB_USEDEP}]
-	static-analyzer? ( dev-lang/perl:* )
+	static-analyzer? (
+		dev-lang/perl:*
+		z3? ( sci-mathematics/z3:0= )
+	)
 	xml? ( dev-libs/libxml2:2=[${MULTILIB_USEDEP}] )
 	${PYTHON_DEPS}"
 # configparser-3.2 breaks the build (3.3 or none at all are fine)
@@ -53,7 +57,7 @@ REQUIRED_USE="${PYTHON_REQUIRED_USE}
 	|| ( ${ALL_LLVM_TARGETS[*]} )"
 
 # We need extra level of indirection for CLANG_RESOURCE_DIR
-S=${WORKDIR}/x/y/cfe-${PV/_/}.src
+S=${WORKDIR}/x/y/${P}
 
 # least intrusive of all
 CMAKE_BUILD_TYPE=RelWithDebInfo
@@ -75,42 +79,31 @@ pkg_setup() {
 }
 
 src_unpack() {
-	# create extra parent dirs for CLANG_RESOURCE_DIR
+	# create extra parent dir for CLANG_RESOURCE_DIR
 	mkdir -p x/y || die
 	cd x/y || die
 
-	default
-
-	mv clang-tools-extra-*.src "${S}"/tools/extra || die
+	git-r3_fetch "https://git.llvm.org/git/clang-tools-extra.git
+		https://github.com/llvm-mirror/clang-tools-extra.git"
 	if use test; then
-		mv llvm-*.src "${WORKDIR}"/llvm || die
+		# needed for patched gtest
+		git-r3_fetch "https://git.llvm.org/git/llvm.git
+			https://github.com/llvm-mirror/llvm.git"
 	fi
-}
+	git-r3_fetch
 
-src_prepare() {
-	# fix finding compiler-rt libs
-	eapply "${FILESDIR}"/5.0.1/0001-Driver-Use-arch-type-to-find-compiler-rt-libraries-o.patch
-
-	# fix stand-alone doc build
-	eapply "${FILESDIR}"/4.0.1/0007-cmake-Support-stand-alone-Sphinx-doxygen-doc-build.patch
-
-	# fix value of ATOMIC_*_LOCK_FREE
-	# (backport, temporary reverted upstream because of FreeBSD issues)
-	eapply "${FILESDIR}"/4.0.1/0001-Frontend-Correct-values-of-ATOMIC_-_LOCK_FREE-to-mat.patch
-
-	cd tools/extra || die
-	# fix stand-alone test build for extra tools
-	eapply "${FILESDIR}"/4.0.1/extra/0001-test-Fix-test-dependencies-when-using-installed-tool.patch
-	eapply "${FILESDIR}"/5.0.1/extra/0002-test-Fix-clang-library-dir-in-LD_LIBRARY_PATH-For-st.patch
-	cd - >/dev/null || die
-
-	# User patches
-	cmake-utils_src_prepare
+	git-r3_checkout https://llvm.org/git/clang-tools-extra.git \
+		"${S}"/tools/extra
+	if use test; then
+		git-r3_checkout https://llvm.org/git/llvm.git \
+			"${WORKDIR}"/llvm '' utils/{lit,llvm-lit,unittest}
+	fi
+	git-r3_checkout "${EGIT_REPO_URI}" "${S}"
 }
 
 multilib_src_configure() {
 	local llvm_version=$(llvm-config --version) || die
-	local clang_version=$(get_version_component_range 1-3 "${llvm_version}")
+	local clang_version=$(ver_cut 1-3 "${llvm_version}")
 
 	local mycmakeargs=(
 		# ensure that the correct llvm-config is used
@@ -138,24 +131,30 @@ multilib_src_configure() {
 
 		-DCLANG_ENABLE_ARCMT=$(usex static-analyzer)
 		-DCLANG_ENABLE_STATIC_ANALYZER=$(usex static-analyzer)
+		# z3 is not multilib-friendly
+		-DCLANG_ANALYZER_BUILD_Z3=$(multilib_native_usex z3)
 	)
 	use test && mycmakeargs+=(
 		-DLLVM_MAIN_SRC_DIR="${WORKDIR}/llvm"
+		-DLLVM_LIT_ARGS="-vv"
 	)
 
 	if multilib_is_native_abi; then
 		mycmakeargs+=(
-			-DLLVM_BUILD_DOCS=$(usex doc)
-			-DLLVM_ENABLE_SPHINX=$(usex doc)
-			-DLLVM_ENABLE_DOXYGEN=OFF
-
-			# workaround pthread
-			-DPTHREAD_LIB=-pthread
+			# normally copied from LLVM_INCLUDE_DOCS but the latter
+			# is lacking value in stand-alone builds
+			-DCLANG_INCLUDE_DOCS=$(usex doc)
+			-DCLANG_TOOLS_EXTRA_INCLUDE_DOCS=$(usex doc)
 		)
 		use doc && mycmakeargs+=(
+			-DLLVM_BUILD_DOCS=ON
+			-DLLVM_ENABLE_SPHINX=ON
 			-DCLANG_INSTALL_SPHINX_HTML_DIR="${EPREFIX}/usr/share/doc/${PF}/html"
 			-DCLANG-TOOLS_INSTALL_SPHINX_HTML_DIR="${EPREFIX}/usr/share/doc/${PF}/tools-extra"
 			-DSPHINX_WARNINGS_AS_ERRORS=OFF
+		)
+		use z3 && mycmakeargs+=(
+			-DZ3_INCLUDE_DIR="${EPREFIX}/usr/include/z3"
 		)
 	else
 		mycmakeargs+=(
@@ -191,11 +190,7 @@ multilib_src_test() {
 	# respect TMPDIR!
 	local -x LIT_PRESERVES_TMP=1
 	cmake-utils_src_make check-clang
-	# clang-tidy requires [static-analyzer] and tests are not split
-	# correctly, so they are all disabled when static-analyzer is off
-	if multilib_is_native_abi && use static-analyzer; then
-		cmake-utils_src_make check-clang-tools
-	fi
+	multilib_is_native_abi && cmake-utils_src_make check-clang-tools
 }
 
 src_install() {
@@ -213,8 +208,8 @@ src_install() {
 	# Apply CHOST and version suffix to clang tools
 	# note: we use two version components here (vs 3 in runtime path)
 	local llvm_version=$(llvm-config --version) || die
-	local clang_version=$(get_version_component_range 1-2 "${llvm_version}")
-	local clang_full_version=$(get_version_component_range 1-3 "${llvm_version}")
+	local clang_version=$(ver_cut 1-2 "${llvm_version}")
+	local clang_full_version=$(ver_cut 1-3 "${llvm_version}")
 	local clang_tools=( clang clang++ clang-cl clang-cpp )
 	local abi i
 
@@ -264,12 +259,6 @@ multilib_src_install_all() {
 	python_fix_shebang "${ED}"
 	if use static-analyzer; then
 		python_optimize "${ED}"usr/lib/llvm/${SLOT}/share/scan-view
-	fi
-
-	# install pre-generated manpages
-	if ! use doc; then
-		insinto "/usr/lib/llvm/${SLOT}/share/man/man1"
-		doins "${WORKDIR}/x/y/llvm-manpages-${PV}/clang"/*.1
 	fi
 
 	docompress "/usr/lib/llvm/${SLOT}/share/man"
