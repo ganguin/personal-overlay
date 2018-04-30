@@ -1,4 +1,4 @@
-# Copyright 1999-2017 Gentoo Foundation
+# Copyright 1999-2018 Gentoo Foundation
 # Distributed under the terms of the GNU General Public License v2
 
 EAPI="6"
@@ -11,7 +11,7 @@ HOMEPAGE="https://git.gnome.org/browse/goffice/"
 
 LICENSE="GPL-2"
 SLOT="0.10"
-KEYWORDS="~alpha amd64 ~arm ~ia64 ~mips ~ppc ~ppc64 ~sparc ~x86 ~x86-fbsd ~amd64-linux ~x86-linux ~x64-solaris"
+KEYWORDS="~alpha amd64 ~arm ~ia64 ~mips ~ppc ~ppc64 ~sparc x86 ~x86-fbsd ~amd64-linux ~x86-linux ~x64-solaris"
 IUSE="+introspection X"
 
 # FIXME: add lasem to tree
@@ -29,7 +29,7 @@ RDEPEND="
 		x11-libs/libXrender:=
 	)
 	>=x11-libs/gdk-pixbuf-2.22:2
-	>=x11-libs/gtk+-3.8.7:3
+	>=x11-libs/gtk+-3.20:3
 	introspection? (
 		>=dev-libs/gobject-introspection-1:=
 		>=gnome-extra/libgsf-1.14.23:= )
